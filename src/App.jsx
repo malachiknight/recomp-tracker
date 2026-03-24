@@ -273,6 +273,8 @@ function TodayTab({ week, phase, log, sess, streak, total, updateLog, goWorkout,
           ›
         </button>
       </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:16 }}>
         <StatCard label="Streak"   value={streak} unit="days"  color="#f59e0b" />
         <StatCard label="Sessions" value={total}  unit="total" color="#38bdf8" />
         <StatCard label="Week"     value={week}   unit="of 10" color={PHASE_MAP[phase].color} />

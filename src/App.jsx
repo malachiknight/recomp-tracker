@@ -126,9 +126,10 @@ function calcProgression(liftId, currentWeight, allSetsCompleted, currentFailure
    APP ROOT
 ───────────────────────────────────────────── */
 export default function App() {
-  const [tab,     setTab]     = useState("today");
-  const [wkView,  setWkView]  = useState(null);
-  const [alerts,  setAlerts]  = useState([]);
+  const [tab,      setTab]      = useState("today");
+  const [wkView,   setWkView]   = useState(null);
+  const [alerts,   setAlerts]   = useState([]);
+  const [viewDate, setViewDate] = useState(today);
 
   const [weights,  saveWeights]  = useStorage("rc_weights",  DEFAULT_WEIGHTS);
   const [failures, saveFailures] = useStorage("rc_failures", {});
@@ -139,9 +140,17 @@ export default function App() {
   const week      = getWeek(todayStr);
   const phase     = getPhase(week);
   const daysLeft  = getDaysLeft();
-  const todayLog  = logs[todayStr] || {};
+  const viewLog   = logs[viewDate] || {};
+  const viewSess  = sessions.find(s => s.date === viewDate);
   const todaySess = sessions.find(s => s.date === todayStr);
   const totalDone = sessions.filter(s => s.completed).length;
+
+  const shiftDate = (days) => {
+    const d = new Date(viewDate + "T12:00:00");
+    d.setDate(d.getDate() + days);
+    const next = d.toISOString().split("T")[0];
+    if (next <= todayStr) setViewDate(next);
+  };
 
   const streak = (() => {
     let s = 0, d = new Date(todayStr);
@@ -153,7 +162,7 @@ export default function App() {
     return s;
   })();
 
-  const updateLog = (u) => saveLogs(p => ({ ...p, [todayStr]: { ...p[todayStr], ...u } }));
+  const updateLog = (u) => saveLogs(p => ({ ...p, [viewDate]: { ...p[viewDate], ...u } }));
 
   const handleComplete = (type, results) => {
     const newW = {...weights}, newF = {...failures}, newAlerts = [];
@@ -210,7 +219,7 @@ export default function App() {
       </nav>
 
       <main style={{ padding:"20px 16px" }}>
-        {tab==="today"    && <TodayTab    week={week} phase={phase} log={todayLog} sess={todaySess} streak={streak} total={totalDone} updateLog={updateLog} goWorkout={() => setTab("workout")} weights={weights} failures={failures} />}
+        {tab==="today"    && <TodayTab    week={week} phase={phase} log={viewLog} sess={viewSess} streak={streak} total={totalDone} updateLog={updateLog} goWorkout={() => setTab("workout")} weights={weights} failures={failures} viewDate={viewDate} todayStr={todayStr} shiftDate={shiftDate} />}
         {tab==="workout"  && <WorkoutTab  wkView={wkView} setWkView={setWkView} weights={weights} sessions={sessions} todayStr={todayStr} todaySess={todaySess} onComplete={handleComplete} alerts={alerts} setAlerts={setAlerts} failures={failures} />}
         {tab==="progress" && <ProgressTab sessions={sessions} weights={weights} logs={logs} streak={streak} total={totalDone} failures={failures} />}
         {tab==="plan"     && <PlanTab     week={week} phase={phase} />}
@@ -222,14 +231,48 @@ export default function App() {
 /* ─────────────────────────────────────────────
    TODAY TAB
 ───────────────────────────────────────────── */
-function TodayTab({ week, phase, log, sess, streak, total, updateLog, goWorkout, weights, failures }) {
-  const steps    = log.steps || 0;
-  const stepGoal = week<=2?7000:week<=4?9000:week<=6?10500:12000;
-  const pct      = Math.min(100, Math.round(steps/stepGoal*100));
+function TodayTab({ week, phase, log, sess, streak, total, updateLog, goWorkout, weights, failures, viewDate, todayStr, shiftDate }) {
+  const isToday   = viewDate === todayStr;
+  const steps     = log.steps || 0;
+  const stepGoal  = week<=2?7000:week<=4?9000:week<=6?10500:12000;
+  const pct       = Math.min(100, Math.round(steps/stepGoal*100));
+
+  const displayDate = isToday ? "Today" : new Date(viewDate+"T12:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
 
   return (
     <div className="fadein">
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:16 }}>
+
+      {/* DATE NAVIGATOR */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+        background:"#0d1829", border:"1px solid #1e293b", borderRadius:12,
+        padding:"10px 14px", marginBottom:16 }}>
+        <button onClick={() => shiftDate(-1)}
+          style={{ background:"#0a1525", border:"1px solid #1e293b", borderRadius:8,
+            color:"#94a3b8", fontSize:18, fontWeight:700, width:36, height:36,
+            cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          ‹
+        </button>
+        <div style={{ textAlign:"center" }}>
+          <div style={{ fontWeight:700, color: isToday ? "#38bdf8" : "#e2e8f0", fontSize:16 }}>
+            {displayDate}
+          </div>
+          {!isToday && (
+            <button onClick={() => shiftDate(999)}
+              style={{ background:"none", border:"none", color:"#475569", fontSize:11,
+                cursor:"pointer", marginTop:2, textDecoration:"underline" }}>
+              back to today
+            </button>
+          )}
+        </div>
+        <button onClick={() => shiftDate(1)}
+          disabled={isToday}
+          style={{ background:"#0a1525", border:"1px solid #1e293b", borderRadius:8,
+            color: isToday ? "#1e293b" : "#94a3b8", fontSize:18, fontWeight:700,
+            width:36, height:36, cursor: isToday ? "default" : "pointer",
+            display:"flex", alignItems:"center", justifyContent:"center" }}>
+          ›
+        </button>
+      </div>
         <StatCard label="Streak"   value={streak} unit="days"  color="#f59e0b" />
         <StatCard label="Sessions" value={total}  unit="total" color="#38bdf8" />
         <StatCard label="Week"     value={week}   unit="of 10" color={PHASE_MAP[phase].color} />
@@ -281,13 +324,17 @@ function TodayTab({ week, phase, log, sess, streak, total, updateLog, goWorkout,
       </Card>
 
       <Card>
-        <div style={{ fontWeight:700, color:"#e2e8f0", fontSize:15, marginBottom:10 }}>Today's Workout</div>
+        <div style={{ fontWeight:700, color:"#e2e8f0", fontSize:15, marginBottom:10 }}>
+          {isToday ? "Today's Workout" : "Workout"}
+        </div>
         {sess?.completed
           ? <div style={{ color:"#4ade80", fontWeight:700 }}>✅ Workout {sess.type} complete!</div>
-          : <button onClick={goWorkout} style={{ background:"linear-gradient(135deg,#1d4ed8,#0369a1)",
-              color:"#fff", border:"none", borderRadius:10, padding:"12px 24px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
-              Log Workout →
-            </button>}
+          : isToday
+            ? <button onClick={goWorkout} style={{ background:"linear-gradient(135deg,#1d4ed8,#0369a1)",
+                color:"#fff", border:"none", borderRadius:10, padding:"12px 24px", fontSize:15, fontWeight:700, cursor:"pointer" }}>
+                Log Workout →
+              </button>
+            : <div style={{ color:"#475569", fontSize:13 }}>No workout logged this day.</div>}
       </Card>
 
       <Card title="Morning Mobility">
@@ -550,6 +597,10 @@ function ProgressTab({ sessions, weights, logs, streak, total, failures }) {
   return (
     <div className="fadein">
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:16 }}>
+        <StatCard label="Streak"   value={streak} unit="days"  color="#f59e0b" />
+        <StatCard label="Sessions" value={total}  unit="total" color="#38bdf8" />
+        <StatCard label="Week"     value={week}   unit="of 10" color={PHASE_MAP[phase].color} />
+      </div>
         <StatCard label="Streak"   value={streak}   unit="days"   color="#f59e0b" />
         <StatCard label="Sessions" value={total}    unit="logged" color="#38bdf8" />
         <StatCard label="Habits"   value={habitPct} unit="%"      color="#4ade80" />
